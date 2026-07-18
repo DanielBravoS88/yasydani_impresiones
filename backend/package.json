@@ -1,0 +1,29 @@
+{
+  "name": "@yasydani/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/multipart": "^10.0.0",
+    "@fastify/rate-limit": "^11.1.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "@yasydani/shared": "*",
+    "dotenv": "^16.4.5",
+    "fastify": "^5.8.5",
+    "mercadopago": "^3.1.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.5.0"
+  }
+}

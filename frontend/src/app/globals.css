@@ -1,0 +1,54 @@
+/* ---- Google Fonts ---- */
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Pacifico&family=Quicksand:wght@400;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Variables de la marca ---- */
+:root {
+  --pink:  #ff77c8;
+  --pink2: #ffd6ec;
+  --hot:   #ff4fd8;
+  --aqua:  #58ded8;
+  --aqua2: #c8fbf5;
+  --lav:   #d8c7ff;
+  --cream: #fff7df;
+  --text:  #51344d;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Quicksand', sans-serif;
+  color: var(--text);
+  background: linear-gradient(135deg, #fff1fa, #dcfffb 45%, #fff8df);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* ---- Scrollbar personalizada ---- */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #ffd6ec; }
+::-webkit-scrollbar-thumb { background: #ff77c8; border-radius: 999px; }
+
+/* ---- Utilidades de la marca ---- */
+@layer utilities {
+  .font-pacifico  { font-family: 'Pacifico', cursive; }
+  .font-quicksand { font-family: 'Quicksand', sans-serif; }
+  .font-baloo     { font-family: 'Baloo 2', sans-serif; }
+
+  .chip-shape { border-radius: 0 24px 0 24px; }
+
+  .text-shadow-brand {
+    text-shadow: 2px 2px 0 #fff, 4px 4px 0 var(--aqua2);
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+}
