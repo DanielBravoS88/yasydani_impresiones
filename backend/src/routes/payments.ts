@@ -8,6 +8,16 @@ const preferenceSchema = z.object({
   access_token: z.string().uuid(),
 });
 
+function isPublicHttpsUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && !['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
   if (!accessToken) fastify.log.warn('Mercado Pago no está configurado');
@@ -33,6 +43,8 @@ const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
     const backendUrl = process.env.BACKEND_URL ?? 'http://localhost:3001';
+    const hasPublicFrontend = isPublicHttpsUrl(frontendUrl);
+    const hasPublicBackend = isPublicHttpsUrl(backendUrl);
     try {
       const response = await new Preference(client).create({ body: {
         items: order.items.map((item: { id: string; product_name: string; quantity: number; unit_price: number }) => ({
@@ -43,13 +55,17 @@ const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
           currency_id: 'CLP',
         })),
         payer: order.customer_email ? { email: order.customer_email, name: order.customer_name } : undefined,
-        back_urls: {
-          success: `${frontendUrl}/pago/exito?pedido=${order.id}`,
-          failure: `${frontendUrl}/pago/error?pedido=${order.id}`,
-          pending: `${frontendUrl}/pago/pendiente?pedido=${order.id}`,
-        },
-        auto_return: 'approved',
-        notification_url: `${backendUrl}/api/payments/mercadopago/webhook`,
+        ...(hasPublicFrontend ? {
+          back_urls: {
+            success: `${frontendUrl}/pago/exito?pedido=${order.id}`,
+            failure: `${frontendUrl}/pago/error?pedido=${order.id}`,
+            pending: `${frontendUrl}/pago/pendiente?pedido=${order.id}`,
+          },
+          auto_return: 'approved' as const,
+        } : {}),
+        ...(hasPublicBackend ? {
+          notification_url: `${backendUrl}/api/payments/mercadopago/webhook`,
+        } : {}),
         external_reference: order.id,
         metadata: { order_number: order.order_number },
       }});

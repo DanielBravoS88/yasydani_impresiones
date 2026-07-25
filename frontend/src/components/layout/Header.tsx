@@ -10,10 +10,14 @@ import CategoryNav from './CategoryNav';
 export default function Header() {
   const [search,      setSearch]      = useState('');
   const [menuOpen,    setMenuOpen]    = useState(false);
+  const [mounted,     setMounted]     = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const { count, toggleCart } = useCartStore();
   const { user, profile, isAdmin, signOut, loading } = useAuth();
+  const cartCount = mounted ? count() : 0;
+
+  useEffect(() => setMounted(true), []);
 
   // Cerrar menú al hacer click fuera
   useEffect(() => {
@@ -161,9 +165,9 @@ export default function Header() {
             style={{ background: 'linear-gradient(135deg,#ff77c8,#58ded8)' }}
           >
             🛒 Carrito
-            {count() > 0 && (
+            {cartCount > 0 && (
               <span className="inline-flex items-center justify-center bg-white text-brand-hot rounded-full w-5 h-5 text-xs font-black ml-1">
-                {count()}
+                {cartCount}
               </span>
             )}
           </button>
