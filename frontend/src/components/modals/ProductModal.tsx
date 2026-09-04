@@ -17,6 +17,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
   const [added, setAdded]           = useState(false);
   const { addItem, toggleCart }     = useCartStore();
   const overlayRef                  = useRef<HTMLDivElement>(null);
+  const isAgenda                    = product.categoria?.slug === 'agendas';
 
   const imgSrc =
     product.imagen_principal_url ??
@@ -96,54 +97,71 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                 {formatPrice(product.precio, product.precio_desde)}
               </p>
 
-              {/* Subir fotos */}
-              <div className="border-3 border-dashed border-brand-aqua bg-[#effffc] rounded-[18px] p-4 text-center">
-                <p className="font-black text-sm text-brand-text mb-2">
-                  📎 Adjuntar fotos para personalizar
-                </p>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-                  className="text-xs w-full"
-                />
-                {files.length > 0 && (
-                  <p className="text-xs text-[#009e96] font-black mt-1">
-                    ✓ {files.length} foto(s) seleccionada(s)
-                  </p>
-                )}
-                <small className="text-xs text-brand-text/50 block mt-1">
-                  Las fotos se envían tras validar el pago
-                </small>
-              </div>
+              {!isAgenda && (
+                <>
+                  {/* Subir fotos */}
+                  <div className="border-3 border-dashed border-brand-aqua bg-[#effffc] rounded-[18px] p-4 text-center">
+                    <p className="font-black text-sm text-brand-text mb-2">
+                      📎 Adjuntar fotos para personalizar
+                    </p>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+                      className="text-xs w-full"
+                    />
+                    {files.length > 0 && (
+                      <p className="text-xs text-[#009e96] font-black mt-1">
+                        ✓ {files.length} foto(s) seleccionada(s)
+                      </p>
+                    )}
+                    <small className="text-xs text-brand-text/50 block mt-1">
+                      Las fotos se envían tras validar el pago
+                    </small>
+                  </div>
 
-              {/* Nota */}
-              <div>
-                <label className="block font-black text-sm text-brand-text mb-1">
-                  Mensaje o detalle para el diseño
-                </label>
-                <textarea
-                  rows={3}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ej: nombre, frase, colores, fecha especial..."
-                  className="w-full border-2 border-brand-pink2 rounded-[14px] px-4 py-2.5 text-sm outline-none focus:border-brand-pink resize-none"
-                />
-              </div>
+                  {/* Nota */}
+                  <div>
+                    <label className="block font-black text-sm text-brand-text mb-1">
+                      Mensaje o detalle para el diseño
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Ej: nombre, frase, colores, fecha especial..."
+                      className="w-full border-2 border-brand-pink2 rounded-[14px] px-4 py-2.5 text-sm outline-none focus:border-brand-pink resize-none"
+                    />
+                  </div>
+                </>
+              )}
+
+              {isAgenda && (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  onClick={handleAddToCart}
+                  disabled={added}
+                >
+                  {added ? '✓ Agregado al carrito' : '🛒 Agregar al carrito'}
+                </Button>
+              )}
             </div>
           </div>
 
           {/* Acciones */}
           <div className="flex gap-3 flex-wrap">
-            <Button
-              variant="primary"
-              onClick={handleAddToCart}
-              disabled={added}
-              className="flex-1"
-            >
-              {added ? '✓ Agregado al carrito' : '🛒 Agregar al carrito'}
-            </Button>
+            {!isAgenda && (
+              <Button
+                variant="primary"
+                onClick={handleAddToCart}
+                disabled={added}
+                className="flex-1"
+              >
+                {added ? '✓ Agregado al carrito' : '🛒 Agregar al carrito'}
+              </Button>
+            )}
             <a
               href={buildWhatsAppUrl(product.nombre)}
               target="_blank"
