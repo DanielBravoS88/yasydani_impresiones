@@ -25,13 +25,9 @@ function ProductosContent() {
   const activeSlug = searchParams.get('categoria') ?? '';
   const urlQ       = searchParams.get('q') ?? '';
 
-  const [search,      setSearch]      = useState(urlQ);
   const [apiProducts, setApiProducts] = useState<Producto[]>([]);
   const [loading,     setLoading]     = useState(false);
   const [selectedProd, setSelectedProd] = useState<Producto | null>(null);
-
-  // Sincronizar el buscador con la URL
-  useEffect(() => { setSearch(urlQ); }, [urlQ]);
 
   // Llamar a la API cada vez que cambien los filtros de la URL
   useEffect(() => {
@@ -63,39 +59,12 @@ function ProductosContent() {
     router.push(qs ? `/productos?${qs}` : '/productos');
   };
 
-  // Búsqueda → push a la URL
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    if (activeSlug)     params.set('categoria', activeSlug);
-    if (search.trim())  params.set('q', search.trim());
-    const qs = params.toString();
-    router.push(qs ? `/productos?${qs}` : '/productos');
-  };
-
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div className="text-center">
         <h1 className="font-pacifico text-4xl text-brand-pink mb-2">Nuestros productos</h1>
         <p className="text-brand-text/70 font-bold">Diseños únicos, hechos con amor para ti 💖</p>
       </div>
-
-      {/* Buscador */}
-      <form onSubmit={handleSearch} className="flex gap-3 max-w-lg mx-auto">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar producto..."
-          className="flex-1 border-2 border-brand-pink2 rounded-full px-5 py-3 text-sm outline-none focus:border-brand-pink"
-        />
-        <button
-          type="submit"
-          className="bg-brand-pink text-white rounded-full px-5 py-3 font-bold hover:bg-brand-hot transition-colors"
-        >
-          🔍
-        </button>
-      </form>
 
       {/* Chips de categoría */}
       <div className="flex flex-wrap gap-3 justify-center">
