@@ -1,15 +1,25 @@
 // Run from the repository root: node --test backend/tests/payments.test.cjs
 // Load the real route with isolated dependencies: no .env, SDK calls or database.
 const assert = require('node:assert/strict');
+const { createHmac } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const vm = require('node:vm');
 const Fastify = require('fastify');
 const ts = require('typescript');
+const { WebhookSignatureValidator, InvalidWebhookSignatureError } = require('mercadopago');
 
 const orderId = '11111111-1111-4111-8111-111111111111';
 const paymentId = '123456';
+const webhookSecret = 'SYNTHETIC_WEBHOOK_SECRET';
+const requestId = '11111111-2222-4333-8444-555555555555';
+function signedHeaders(dataId = paymentId, secret = webhookSecret) {
+  const ts = String(Date.now());
+  const hash = createHmac('sha256', secret)
+    .update(`id:${dataId.toLowerCase()};request-id:${requestId};ts:${ts};`).digest('hex');
+  return { 'x-signature': `ts=${ts},v1=${hash}`, 'x-request-id': requestId };
+}
 const filename = path.join(__dirname, '../src/routes/payments.ts');
 const compiledRoute = ts.transpileModule(readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -24,9 +34,11 @@ async function setup(t, options = {}) {
   };
   const writes = [];
   const lookups = [];
+  let databaseCalls = 0;
   let attempts = 0;
   const supabase = {
     from(table) {
+      databaseCalls++;
       assert.equal(table, 'orders');
       return {
         select(columns) {
@@ -74,6 +86,8 @@ async function setup(t, options = {}) {
     },
   };
   const sdk = {
+    // Exercise the installed SDK's real cryptographic validator; only I/O is mocked.
+    WebhookSignatureValidator, InvalidWebhookSignatureError,
     MercadoPagoConfig: class {},
     Payment: class {
       async get(request) {
@@ -89,7 +103,10 @@ async function setup(t, options = {}) {
   const module = { exports: {} };
   vm.runInNewContext(compiledRoute, {
     module, exports: module.exports, URL,
-    process: { env: { MERCADOPAGO_ACCESS_TOKEN: 'SYNTHETIC_TEST_TOKEN' } },
+    process: { env: {
+      MERCADOPAGO_ACCESS_TOKEN: 'SYNTHETIC_TEST_TOKEN',
+      MERCADOPAGO_WEBHOOK_SECRET: options.secret === undefined ? webhookSecret : options.secret,
+    } },
     require(name) {
       if (name === 'mercadopago') return sdk;
       if (name === '../plugins/supabase') return { supabase };
@@ -104,12 +121,59 @@ async function setup(t, options = {}) {
   return {
     order, writes, lookups,
     attempts: () => attempts,
-    notify: () => app.inject({
-      method: 'POST', url: '/api/payments/mercadopago/webhook',
-      payload: { type: 'payment', data: { id: paymentId } },
+    databaseCalls: () => databaseCalls,
+    notify: (request = {}) => app.inject({
+      method: 'POST', url: `/api/payments/mercadopago/webhook${request.query ?? `?data.id=${paymentId}`}`,
+      headers: request.headers ?? signedHeaders(),
+      payload: request.payload ?? { type: 'payment', data: { id: paymentId } },
     }),
   };
 }
+
+for (const [name, request] of [
+  ['invalid signature', { headers: { ...signedHeaders(), 'x-signature': `ts=${Date.now()},v1=${'0'.repeat(64)}` } }],
+  ['missing signature', { headers: { 'x-request-id': requestId } }],
+  ['missing request id', { headers: { 'x-signature': signedHeaders()['x-signature'] } }],
+  ['altered query identifier', { query: '?data.id=654321' }],
+  ['altered body identifier', { payload: { type: 'payment', data: { id: '654321' } } }],
+  ['missing query identifier', { query: '' }],
+  ['duplicate query identifier', { query: `?data.id=${paymentId}&data.id=654321` }],
+  ['malformed signature', { headers: { 'x-signature': 'not-a-signature', 'x-request-id': requestId } }],
+  ['malformed timestamp', { headers: { 'x-signature': `ts=invalid,v1=${'0'.repeat(64)}`, 'x-request-id': requestId } }],
+  ['malformed digest', { headers: { 'x-signature': `ts=${Date.now()},v1=abc`, 'x-request-id': requestId } }],
+  ['duplicate signature fields', { headers: { 'x-signature': `${signedHeaders()['x-signature']},ts=${Date.now()}`, 'x-request-id': requestId } }],
+  ['malformed request id', { headers: { ...signedHeaders(), 'x-request-id': `${requestId},other` } }],
+  ['altered request id', { headers: { ...signedHeaders(), 'x-request-id': 'another-request-id' } }],
+  ['signature made with another secret', { headers: signedHeaders(paymentId, 'ANOTHER_SYNTHETIC_SECRET') }],
+]) {
+  test(`${name} is rejected before any Mercado Pago or Supabase access`, async t => {
+    const fixture = await setup(t);
+    const response = await fixture.notify(request);
+    assert.equal(response.statusCode, 401);
+    assert.deepEqual(response.json(), { received: false });
+    assert.equal(fixture.lookups.length, 0);
+    assert.equal(fixture.databaseCalls(), 0);
+    assert.equal(fixture.attempts(), 0);
+  });
+}
+
+for (const secret of [null, '', '   ']) {
+  test(`an unconfigured webhook secret (${JSON.stringify(secret)}) fails closed`, async t => {
+    const fixture = await setup(t, { secret });
+    const response = await fixture.notify();
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.json(), { received: false });
+    assert.equal(fixture.lookups.length, 0);
+    assert.equal(fixture.databaseCalls(), 0);
+  });
+}
+
+test('a valid signature accepts numeric body identifiers from Mercado Pago', async t => {
+  const fixture = await setup(t);
+  const response = await fixture.notify({ payload: { type: 'payment', data: { id: Number(paymentId) } } });
+  assert.equal(response.statusCode, 200);
+  assert.equal(fixture.writes.length, 1);
+});
 
 test('successful persistence acknowledges the webhook after saving the payment', async t => {
   const fixture = await setup(t);
