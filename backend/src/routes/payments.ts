@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { MercadoPagoConfig, Payment, Preference } from 'mercadopago';
+import { InvalidWebhookSignatureError, MercadoPagoConfig, Payment, Preference, WebhookSignatureValidator } from 'mercadopago';
 import { z } from 'zod';
 import { supabase } from '../plugins/supabase';
 
@@ -20,6 +20,7 @@ function isPublicHttpsUrl(value: string): boolean {
 
 const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
   const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN;
+  const webhookSecret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
   if (!accessToken) fastify.log.warn('Mercado Pago no está configurado');
   const client = new MercadoPagoConfig({ accessToken: accessToken ?? 'NOT_CONFIGURED' });
 
@@ -80,10 +81,38 @@ const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/payments/mercadopago/webhook', {
     config: { rateLimit: { max: 120, timeWindow: '1 minute' } },
   }, async (request, reply) => {
-    const body = request.body as { type?: string; data?: { id?: string } } | undefined;
-    if (body?.type !== 'payment' || !body.data?.id || !accessToken) return reply.send({ received: true });
+    if (!webhookSecret?.trim() || !accessToken) {
+      return reply.status(503).send({ received: false });
+    }
+    const xSignature = request.headers['x-signature'];
+    const xRequestId = request.headers['x-request-id'];
+    const dataId = (request.query as Record<string, unknown>)['data.id'];
+    // Exige valores inequívocos: el SDK acepta el primer elemento de un array
+    // y omite identificadores ausentes del manifiesto firmado.
+    if (typeof xSignature !== 'string'
+      || !/^(?:ts=\d+,\s*v1=[a-f0-9]{64}|v1=[a-f0-9]{64},\s*ts=\d+)$/.test(xSignature)
+      || typeof xRequestId !== 'string' || !/^[A-Za-z0-9._-]+$/.test(xRequestId)
+      || typeof dataId !== 'string' || !/^[A-Za-z0-9_-]+$/.test(dataId)) {
+      return reply.status(401).send({ received: false });
+    }
     try {
-      const payment = await new Payment(client).get({ id: body.data.id });
+      WebhookSignatureValidator.validate({ xSignature, xRequestId, dataId, secret: webhookSecret });
+    } catch (error) {
+      if (error instanceof InvalidWebhookSignatureError) {
+        return reply.status(401).send({ received: false });
+      }
+      fastify.log.error('No se pudo verificar la firma del webhook');
+      return reply.status(500).send({ received: false });
+    }
+    const body = request.body as { type?: string; data?: { id?: string | number } } | undefined;
+    if (body?.type !== 'payment') return reply.send({ received: true });
+    const bodyId = body.data?.id;
+    if ((typeof bodyId !== 'string' && !(typeof bodyId === 'number' && Number.isSafeInteger(bodyId)))
+      || String(bodyId).toLowerCase() !== dataId.toLowerCase()) {
+      return reply.status(401).send({ received: false });
+    }
+    try {
+      const payment = await new Payment(client).get({ id: dataId.toLowerCase() });
       const orderId = payment.external_reference;
       if (!orderId) return reply.send({ received: true });
       const { data: order, error: orderError } = await supabase.from('orders').select('id,total,payment_status').eq('id', orderId).single();
