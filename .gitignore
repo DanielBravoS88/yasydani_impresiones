@@ -4,9 +4,10 @@ dist/
 .next/
 out/
 
-# Environment
-.env
-.env.*
+# Environment: local files and backups; only explicit templates may be committed
+.env*
+*.env
+*.env.*
 !.env.example
 !**/.env.example
 !**/.env.local.example
