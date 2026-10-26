@@ -86,7 +86,8 @@ const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
       const payment = await new Payment(client).get({ id: body.data.id });
       const orderId = payment.external_reference;
       if (!orderId) return reply.send({ received: true });
-      const { data: order } = await supabase.from('orders').select('id,total,payment_status').eq('id', orderId).single();
+      const { data: order, error: orderError } = await supabase.from('orders').select('id,total,payment_status').eq('id', orderId).single();
+      if (orderError && orderError.code !== 'PGRST116') throw orderError;
       if (!order || Number(payment.transaction_amount) !== Number(order.total) || payment.currency_id !== 'CLP') {
         fastify.log.warn({ orderId, paymentId: payment.id }, 'Pago rechazado por inconsistencia');
         return reply.send({ received: true });
@@ -94,11 +95,13 @@ const paymentsRoutes: FastifyPluginAsync = async (fastify) => {
       const paymentStatus = payment.status === 'approved' ? 'aprobado'
         : payment.status === 'rejected' ? 'rechazado' : 'pendiente';
       if (order.payment_status !== paymentStatus) {
-        await supabase.from('orders').update({
+        const { data: updatedOrder, error: updateError } = await supabase.from('orders').update({
           payment_status: paymentStatus,
           status: paymentStatus === 'aprobado' ? 'pagado' : undefined,
           mp_payment_id: String(payment.id),
-        }).eq('id', orderId);
+        }).eq('id', orderId).select('id').single();
+        if (updateError) throw updateError;
+        if (!updatedOrder) throw new Error('No se pudo confirmar la actualización del pedido');
       }
       return reply.send({ received: true });
     } catch (error) {
